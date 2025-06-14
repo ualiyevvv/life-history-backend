@@ -26,53 +26,71 @@ echo -e "${YELLOW}Создание директорий для certbot...${NC}"
 mkdir -p ./certbot/conf
 mkdir -p ./certbot/www
 
-# Создание временного nginx.conf для первоначального получения сертификата
-echo -e "${YELLOW}Создание временной конфигурации nginx...${NC}"
+# Остановка любых запущенных сервисов
+echo -e "${YELLOW}Остановка любых запущенных Docker сервисов...${NC}"
+docker-compose down
+
+# Запуск простого временного nginx контейнера
+echo -e "${YELLOW}Запуск временного nginx для получения сертификата...${NC}"
+docker run -d --name temp-nginx \
+    -p 80:80 \
+    -v $(pwd)/certbot/www:/var/www/certbot \
+    -v $(pwd)/nginx-temp.conf:/etc/nginx/nginx.conf:ro \
+    nginx:alpine
+
+# Создание временного nginx.conf
 cat > nginx-temp.conf << EOF
 events {
     worker_connections 1024;
 }
 
 http {
-    include /etc/nginx/mime.types;
-    default_type application/octet-stream;
-
     server {
         listen 80;
         server_name $DOMAIN;
 
         location /.well-known/acme-challenge/ {
             root /var/www/certbot;
+            try_files \$uri \$uri/ =404;
         }
 
         location / {
-            return 200 "Temporary server for SSL setup\\n";
+            return 200 "Temporary server for SSL setup\n";
             add_header Content-Type text/plain;
         }
     }
 }
 EOF
 
-# Запуск nginx с временной конфигурацией
-echo -e "${YELLOW}Запуск nginx с временной конфигурацией...${NC}"
-docker-compose up -d nginx
+# Перезапуск nginx с новой конфигурацией
+echo -e "${YELLOW}Перезапуск nginx с правильной конфигурацией...${NC}"
+docker stop temp-nginx && docker rm temp-nginx
+docker run -d --name temp-nginx \
+    -p 80:80 \
+    -v $(pwd)/certbot/www:/var/www/certbot \
+    -v $(pwd)/nginx-temp.conf:/etc/nginx/nginx.conf:ro \
+    nginx:alpine
 
 # Ожидание запуска nginx
-echo -e "${YELLOW}Ожидание запуска nginx (10 секунд)...${NC}"
-sleep 10
+echo -e "${YELLOW}Ожидание запуска nginx (5 секунд)...${NC}"
+sleep 5
+
+# Тестирование доступности
+echo -e "${YELLOW}Тестирование доступности...${NC}"
+curl -I http://localhost/ || echo "Nginx может быть недоступен локально, но это нормально"
 
 # Получение сертификата
 echo -e "${YELLOW}Получение SSL сертификата от Let's Encrypt...${NC}"
 docker run --rm \
     -v $(pwd)/certbot/conf:/etc/letsencrypt \
     -v $(pwd)/certbot/www:/var/www/certbot \
-    --network $(basename $(pwd))_life-story-network \
     certbot/certbot certonly \
     --webroot \
     --webroot-path=/var/www/certbot \
     --email $EMAIL \
     --agree-tos \
     --no-eff-email \
+    --force-renewal \
     -d $DOMAIN
 
 # Проверка успешности получения сертификата
@@ -81,19 +99,28 @@ if [ -f "./certbot/conf/live/$DOMAIN/fullchain.pem" ]; then
 
     # Остановка временного nginx
     echo -e "${YELLOW}Остановка временного nginx...${NC}"
-    docker-compose down
+    docker stop temp-nginx && docker rm temp-nginx
 
-    # Восстановление основной конфигурации nginx
-    echo -e "${YELLOW}Восстановление основной конфигурации nginx...${NC}"
-    rm nginx-temp.conf
+    # Удаление временной конфигурации
+    rm -f nginx-temp.conf
 
     # Запуск всех сервисов с SSL
     echo -e "${YELLOW}Запуск всех сервисов с SSL поддержкой...${NC}"
     docker-compose up -d
 
-    echo -e "${GREEN}🎉 SSL настроен успешно! Ваш сайт доступен по адресу: https://$DOMAIN${NC}"
+    # Ожидание запуска сервисов
+    sleep 10
+
+    # Проверка работы HTTPS
+    echo -e "${YELLOW}Проверка работы HTTPS...${NC}"
+    if curl -I https://$DOMAIN/ --connect-timeout 10 --max-time 30 > /dev/null 2>&1; then
+        echo -e "${GREEN}🎉 SSL настроен успешно! Ваш сайт доступен по адресу: https://$DOMAIN${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Сертификат получен, но HTTPS пока недоступен. Проверьте логи: docker-compose logs nginx${NC}"
+    fi
+
     echo -e "${YELLOW}Для автоматического обновления сертификатов добавьте в crontab:${NC}"
-    echo -e "${YELLOW}0 12 * * * /usr/bin/docker run --rm -v $(pwd)/certbot/conf:/etc/letsencrypt -v $(pwd)/certbot/www:/var/www/certbot certbot/certbot renew --quiet${NC}"
+    echo -e "${YELLOW}0 12 * * * cd $(pwd) && ./ssl-renew.sh >> /var/log/ssl-renew.log 2>&1${NC}"
 
 else
     echo -e "${RED}❌ Ошибка получения сертификата!${NC}"
@@ -101,9 +128,10 @@ else
     echo -e "${YELLOW}1. Домен $DOMAIN указывает на этот сервер${NC}"
     echo -e "${YELLOW}2. Порт 80 открыт и доступен из интернета${NC}"
     echo -e "${YELLOW}3. Нет других веб-серверов, занимающих порт 80${NC}"
+    echo -e "${YELLOW}4. Логи certbot: docker run --rm -v $(pwd)/certbot/conf:/etc/letsencrypt certbot/certbot logs${NC}"
 
     # Очистка при ошибке
-    docker-compose down
+    docker stop temp-nginx && docker rm temp-nginx
     rm -f nginx-temp.conf
     exit 1
 fi
