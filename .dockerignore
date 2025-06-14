@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+npm-debug.log
+
+# Environment and config
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+
+# Uploads (will be mounted as volume)
+uploads/
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
+api-examples.http
+*.md
+
+# Development
+.vscode/
+.idea/
+.DS_Store
+
+# Docker
+docker-compose.yml
+docker-compose.dev.yml
+Dockerfile
+.dockerignore
+
+# Scripts
+init.sh
+
+# Tests
+test/
+coverage/
+.nyc_output/
