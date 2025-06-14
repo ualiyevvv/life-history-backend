@@ -50,7 +50,7 @@ services:
       SALT_ROUNDS: 10
 
       # CORS
-      ALLOWED_ORIGINS: https://myexampledomain.com,http://localhost:9009
+      ALLOWED_ORIGINS: https://shimmering-brioche-73195a.netlify.app,http://localhost:9009
 
       # Rate Limiting
       RATE_LIMIT_WINDOW: 60000
@@ -84,32 +84,25 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./uploads:/usr/share/nginx/html/uploads:ro
-      - certbot-etc:/etc/letsencrypt
-      - certbot-var:/var/lib/letsencrypt
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
     networks:
       - life-story-network
 
-  # Certbot для получения и обновления SSL-сертификатов
+  # Certbot для получения SSL сертификатов
   certbot:
-    image: certbot/certbot:latest
+    image: certbot/certbot
     container_name: life-story-certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    command: certonly --webroot -w /var/www/certbot --force-renewal --email ayan.d3v@gmail.com -d cond.13lab.tech --agree-tos
     depends_on:
       - nginx
-    volumes:
-      - certbot-etc:/etc/letsencrypt
-      - certbot-var:/var/lib/letsencrypt
-      - ./Uploads:/usr/share/nginx/html/uploads:ro
-    entrypoint: "/bin/sh -c 'trap exit TERM; certbot certonly --webroot --webroot-path=/usr/share/nginx/html/uploads --email ayan.d3v@gmail.com --agree-tos --no-eff-email -d cond.13lab.tech; while :; do certbot renew --post-hook \"docker kill -s HUP life-story-nginx\"; sleep 12h; done'"
-    networks:
-      - life-story-network
 
 # Volumes
 volumes:
   postgres_data:
-    driver: local
-  certbot-etc:
-    driver: local
-  certbot-var:
     driver: local
 
 # Networks
