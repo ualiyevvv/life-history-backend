@@ -9,7 +9,7 @@ services:
     environment:
       POSTGRES_DB: life_story
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-secretpassword}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-admin}
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -43,10 +43,10 @@ services:
       DB_PORT: 5432
       DB_NAME: life_story
       DB_USER: postgres
-      DB_PASSWORD: ${DB_PASSWORD:-secretpassword}
+      DB_PASSWORD: ${DB_PASSWORD:-admin}
 
       # Authentication
-      PRIVATE_KEY: ${PRIVATE_KEY:-your_secret_private_key_here}
+      PRIVATE_KEY: ${PRIVATE_KEY:-12345}
       SALT_ROUNDS: 10
 
       # CORS
