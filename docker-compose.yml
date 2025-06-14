@@ -35,7 +35,7 @@ services:
         condition: service_healthy
     environment:
       # Server
-      PORT: 3000
+      PORT: 3003
       NODE_ENV: production
 
       # Database
